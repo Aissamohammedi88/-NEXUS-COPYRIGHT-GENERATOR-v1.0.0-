@@ -1,0 +1,778 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# NEXUS COPYRIGHT GENERATOR v1.0.0
+# Genere des copyrights intelligents avec detection de licence, verification
+# de paternite, et recherche automatique dans les registres publics.
+# Auteur : Aissa Mohammedi (DGK)
+# Licence : NEXUS-OPEN-2.0
+
+import os
+import re
+import sys
+import ssl
+import json
+import time
+import hashlib
+import datetime
+import threading
+import urllib.request
+import urllib.parse
+import urllib.error
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+VERSION = "1.0.0"
+AUTEUR = "Aissa Mohammedi (DGK)"
+LICENCE = "NEXUS-OPEN-2.0"
+USER_AGENT = "NexusCopyrightGenerator/1.0"
+
+HOME = os.path.expanduser("~")
+BASE = os.path.join(HOME, "Documents", "nexus_copyright")
+os.makedirs(BASE, exist_ok=True)
+EXPORT_DIR = os.path.join(BASE, "exports")
+os.makedirs(EXPORT_DIR, exist_ok=True)
+LOG_FILE = os.path.join(BASE, "copyright.log")
+
+PORT = 8130
+
+CTX = ssl.create_default_context()
+CTX.check_hostname = False
+CTX.verify_mode = ssl.CERT_NONE
+
+LOG_LOCK = threading.RLock()
+
+
+def log(msg):
+ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
+line = "[{}] {}".format(ts, msg)
+with LOG_LOCK:
+try:
+print(line, flush=True)
+except Exception:
+pass
+try:
+with open(LOG_FILE, "a", encoding="utf-8") as f:
+f.write(line + "\n")
+except OSError:
+pass
+
+
+# ===============================================================
+# APIs COPYRIGHT GRATUITES
+# ===============================================================
+
+APIS_COPYRIGHT = {
+"licences": [
+{
+"nom": "GitHub Licenses",
+"url": "https://api.github.com/licenses",
+"auth": "aucune",
+"free": "5000/h",
+"doc": "https://docs.github.com/rest/licenses/licenses",
+"usage": "Liste toutes les licences open source disponibles",
+},
+{
+"nom": "GitHub License Detail",
+"url": "https://api.github.com/licenses/{key}",
+"auth": "aucune",
+"free": "5000/h",
+"doc": "https://docs.github.com/rest/licenses/licenses",
+"usage": "Details complets d'une licence (MIT, Apache, GPL...)",
+},
+{
+"nom": "SPDX License List",
+"url": "https://spdx.org/licenses/licenses.json",
+"auth": "aucune",
+"free": "gratuit",
+"doc": "https://spdx.org/licenses",
+"usage": "Liste officielle SPDX de toutes les licences",
+},
+{
+"nom": "Choose a License",
+"url": "https://choosealicense.com/licenses/",
+"auth": "aucune",
+"free": "gratuit",
+"doc": "https://choosealicense.com",
+"usage": "Guide de selection de licence",
+},
+{
+"nom": "Open Source Initiative",
+"url": "https://opensource.org/licenses",
+"auth": "aucune",
+"free": "gratuit",
+"doc": "https://opensource.org/licenses",
+"usage": "Licences approuvees OSI",
+},
+],
+"marques": [
+{
+"nom": "USPTO Trademark Search",
+"url": "https://developer.uspto.gov/ibd-api/v1/application/publications",
+"auth": "aucune",
+"free": "gratuit",
+"doc": "https://developer.uspto.gov",
+"usage": "Recherche de marques deposees aux USA",
+},
+{
+"nom": "INPI Marques France",
+"url": "https://data.inpi.fr/api",
+"auth": "compte gratuit",
+"free": "gratuit",
+"doc": "https://data.inpi.fr",
+"usage": "Recherche de marques deposees en France",
+},
+{
+"nom": "EUIPO Trademarks",
+"url": "https://euipo.europa.eu/copla/trademark/data",
+"auth": "aucune",
+"free": "gratuit",
+"doc": "https://euipo.europa.eu",
+"usage": "Recherche de marques europeennes",
+},
+{
+"nom": "WIPO Global Brand Database",
+"url": "https://branddb.wipo.int/branddb/en/",
+"auth": "aucune",
+"free": "gratuit",
+"doc": "https://www.wipo.int/branddb/en/",
+"usage": "Recherche mondiale de marques",
+},
+],
+"brevets": [
+{
+"nom": "USPTO PatentsView",
+"url": "https://api.patentsview.org/patents/query",
+"auth": "aucune",
+"free": "gratuit",
+"doc": "https://patentsview.org/apis",
+"usage": "Recherche de brevets americains (12M+ brevets)",
+},
+{
+"nom": "EPO Open Patent Services",
+"url": "https://ops.epo.org/3.2/rest-services/",
+"auth": "compte gratuit",
+"free": "4 GB/mois",
+"doc": "https://developers.epo.org",
+"usage": "Recherche de brevets europeens",
+},
+{
+"nom": "WIPO PATENTSCOPE",
+"url": "https://patentscope.wipo.int/search/en/result.jsf",
+"auth": "aucune",
+"free": "gratuit",
+"doc": "https://patentscope.wipo.int",
+"usage": "Recherche mondiale de brevets",
+},
+{
+"nom": "Google Patents",
+"url": "https://patents.google.com/xhr/query",
+"auth": "aucune",
+"free": "gratuit",
+"doc": "https://patents.google.com",
+"usage": "Recherche de brevets (moteur Google)",
+},
+],
+"paternite": [
+{
+"nom": "Crossref Works",
+"url": "https://api.crossref.org/works",
+"auth": "aucune",
+"free": "50/sec",
+"doc": "https://api.crossref.org",
+"usage": "Verification de paternite d'articles scientifiques",
+},
+{
+"nom": "ORCID Public",
+"url": "https://pub.orcid.org/v3.0",
+"auth": "aucune",
+"free": "24/sec",
+"doc": "https://pub.orcid.org",
+"usage": "Verification d'identite chercheur",
+},
+{
+"nom": "OpenAlex Authors",
+"url": "https://api.openalex.org/authors",
+"auth": "aucune",
+"free": "100k/jour",
+"doc": "https://docs.openalex.org",
+"usage": "Verification d'auteurs scientifiques",
+},
+{
+"nom": "Wikidata",
+"url": "https://www.wikidata.org/w/api.php",
+"auth": "aucune",
+"free": "gratuit",
+"doc": "https://www.wikidata.org/w/api.php",
+"usage": "Verification d'entites",
+},
+],
+}
+
+
+# ===============================================================
+# GENERATEURS DE COPYRIGHT
+# ===============================================================
+
+LICENCES_PREDEFINIES = {
+"MIT": {
+"nom": "MIT License",
+"spdx": "MIT",
+"template": """MIT License
+
+Copyright (c) {annee} {auteur}
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.""",
+},
+"Apache-2.0": {
+"nom": "Apache License 2.0",
+"spdx": "Apache-2.0",
+"template": """Apache License
+Version 2.0, January 2004
+http://www.apache.org/licenses/
+
+Copyright (c) {annee} {auteur}
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.""",
+},
+"GPL-3.0": {
+"nom": "GNU General Public License v3.0",
+"spdx": "GPL-3.0",
+"template": """GNU GENERAL PUBLIC LICENSE
+Version 3, 29 June 2007
+
+Copyright (c) {annee} {auteur}
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.""",
+},
+"BSD-3-Clause": {
+"nom": "BSD 3-Clause License",
+"spdx": "BSD-3-Clause",
+"template": """BSD 3-Clause License
+
+Copyright (c) {annee} {auteur}
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+this list of conditions and the following disclaimer in the documentation
+and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its
+contributors may be used to endorse or promote products derived from
+this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.""",
+},
+"NEXUS-OPEN-2.0": {
+"nom": "NEXUS-OPEN-2.0 License",
+"spdx": "NEXUS-OPEN-2.0",
+"template": """NEXUS-OPEN-2.0 License
+
+Copyright (c) {annee} {auteur}
+
+Licence ouverte avec clauses ethiques. Voir le texte complet sur :
+https://github.com/aissa-mohammedi/nexus-open-2.0
+
+Points cles :
+- Paternite obligatoire
+- Interdiction d'usage militaire
+- Clause Google : 0,5 % revenus reverses
+- Clause NVIDIA : publication des modifications
+- Encadrement IA : RGPD, CCPA, Loi 25""",
+},
+"Unlicense": {
+"nom": "The Unlicense",
+"spdx": "Unlicense",
+"template": """This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <https://unlicense.org>""",
+},
+}
+
+
+def generer_copyright(licence_key, auteur, annee=None, projet=None, email=None, url=None):
+"""Genere un copyright personnalise."""
+if annee is None:
+annee = datetime.datetime.now().year
+
+if licence_key not in LICENCES_PREDEFINIES:
+return {"erreur": "Licence inconnue : " + licence_key}
+
+licence = LICENCES_PREDEFINIES[licence_key]
+contenu = licence["template"].format(annee=annee, auteur=auteur)
+
+# Ajout de metadonnees
+if projet:
+contenu = "// Projet : " + projet + "\n" + contenu
+if email:
+contenu = "// Contact : " + email + "\n" + contenu
+if url:
+contenu = "// URL : " + url + "\n" + contenu
+
+return {
+"licence": licence["nom"],
+"spdx": licence["spdx"],
+"auteur": auteur,
+"annee": annee,
+"contenu": contenu,
+"hash": hashlib.sha256(contenu.encode()).hexdigest(),
+}
+
+
+def generer_header_fichier(auteur, annee, projet, licence, email=None):
+"""Genere un header a coller en haut de chaque fichier."""
+header = "#!/usr/bin/env python3\n"
+header += "# -*- coding: utf-8 -*-\n"
+header += "# {}\n".format(projet or "Projet")
+header += "# Copyright (c) {} {}\n".format(annee, auteur)
+header += "# Licence : {}\n".format(licence)
+if email:
+header += "# Contact : {}\n".format(email)
+header += "#\n"
+header += "# Ce fichier fait partie du projet {}.\n".format(projet or "NEXUS")
+header += "# Toute redistribution doit conserver cette mention.\n"
+return header
+
+
+def verifier_paternite(nom, api_key=None):
+"""Verifie la paternite d'un nom via plusieurs APIs."""
+resultats = {
+"nom": nom,
+"timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+"sources": [],
+}
+
+# GitHub
+try:
+url = "https://api.github.com/search/users?q=" + urllib.parse.quote(nom)
+req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+with urllib.request.urlopen(req, timeout=10, context=CTX) as r:
+data = json.loads(r.read().decode("utf-8", "ignore"))
+resultats["sources"].append({
+"source": "github",
+"total": data.get("total_count", 0),
+"trouve": data.get("total_count", 0) > 0,
+})
+except Exception as e:
+resultats["sources"].append({"source": "github", "erreur": str(e)[:80]})
+
+# ORCID
+try:
+url = "https://pub.orcid.org/v3.0/expanded-search/?q=" + urllib.parse.quote(nom)
+req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
+with urllib.request.urlopen(req, timeout=10, context=CTX) as r:
+data = json.loads(r.read().decode("utf-8", "ignore"))
+resultats["sources"].append({
+"source": "orcid",
+"total": data.get("num-found", 0),
+"trouve": data.get("num-found", 0) > 0,
+})
+except Exception as e:
+resultats["sources"].append({"source": "orcid", "erreur": str(e)[:80]})
+
+# OpenAlex
+try:
+url = "https://api.openalex.org/authors?search=" + urllib.parse.quote(nom)
+req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+with urllib.request.urlopen(req, timeout=10, context=CTX) as r:
+data = json.loads(r.read().decode("utf-8", "ignore"))
+resultats["sources"].append({
+"source": "openalex",
+"total": data.get("meta", {}).get("count", 0),
+"trouve": data.get("meta", {}).get("count", 0) > 0,
+})
+except Exception as e:
+resultats["sources"].append({"source": "openalex", "erreur": str(e)[:80]})
+
+return resultats
+
+
+def rechercher_marque(nom):
+"""Recherche un nom dans les registres de marques (USPTO)."""
+try:
+url = "https://developer.uspto.gov/ibd-api/v1/application/publications?searchText=" + urllib.parse.quote(nom)
+req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+with urllib.request.urlopen(req, timeout=10, context=CTX) as r:
+data = json.loads(r.read().decode("utf-8", "ignore"))
+return {"trouve": True, "total": len(data.get("results", []))}
+except Exception as e:
+return {"trouve": False, "erreur": str(e)[:80]}
+
+
+# ===============================================================
+# HTML
+# ===============================================================
+
+HTML = """<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NEXUS COPYRIGHT GENERATOR</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,system-ui,sans-serif;background:#05000a;color:#c8ffd0;min-height:100vh;padding:20px}
+.container{max-width:1200px;margin:0 auto}
+h1{font-size:clamp(22px,4vw,36px);font-weight:700;letter-spacing:-2px;background:linear-gradient(135deg,#00ffc8,#00c8ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:6px}
+.sub{color:#5a8a7a;font-size:12px;margin-bottom:20px;font-family:ui-monospace,monospace}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}
+.stat{background:rgba(5,20,15,0.7);border:1px solid #1a3a2a;border-radius:10px;padding:14px}
+.stat-lbl{color:#5a8a7a;font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+.stat-val{color:#00ffc8;font-size:20px;font-weight:700;font-family:ui-monospace,monospace}
+.card{background:rgba(5,20,15,0.7);border:1px solid #1a3a2a;border-radius:12px;padding:16px;margin-bottom:14px}
+.card h2{color:#00d4ff;font-size:11px;text-transform:uppercase;letter-spacing:2px;margin-bottom:12px}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+input,select{background:#05000a;border:1px solid #1a3a2a;border-radius:8px;padding:10px 12px;color:#c8ffd0;font-size:13px;font-family:inherit;outline:none}
+input:focus,select:focus{border-color:#00ffc8}
+input{flex:1;min-width:120px}
+button{background:#00ffc8;color:#000;border:none;padding:10px 20px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit}
+button:hover{background:#00c8ff}
+button.alt{background:transparent;color:#00ffc8;border:1px solid #1a3a2a}
+button.alt:hover{background:rgba(0,255,200,0.1)}
+pre{background:#05000a;border:1px solid #1a3a2a;border-radius:8px;padding:14px;overflow-x:auto;font-family:ui-monospace,monospace;font-size:11px;color:#a8ffc8;white-space:pre-wrap;line-height:1.5;max-height:600px}
+.footer{text-align:center;color:#3a4a4a;font-size:10px;margin-top:30px;font-family:ui-monospace,monospace}
+.api{background:rgba(5,20,15,0.5);border:1px solid #1a3a2a;border-radius:10px;padding:12px;margin-bottom:8px}
+.api h3{color:#00ffc8;font-size:13px;margin-bottom:4px}
+.api .meta{color:#5a8a7a;font-size:10px;font-family:ui-monospace,monospace;line-height:1.5}
+.badge{display:inline-block;background:rgba(0,255,200,0.15);color:#00ffc8;font-size:9px;padding:2px 8px;border-radius:999px;font-weight:700;margin-left:6px}
+.badge.free{background:rgba(0,255,136,0.15);color:#00ff88}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>NEXUS COPYRIGHT GENERATOR</h1>
+<p class="sub">v__V__ - __AUTEUR__</p>
+
+<div class="card">
+<h2>Generer un copyright</h2>
+<div class="row">
+<input id="auteur" placeholder="Nom de l'auteur" value="Aissa Mohammedi (DGK)">
+<input id="annee" placeholder="Annee" value="2026" style="max-width:100px">
+<input id="projet" placeholder="Nom du projet">
+</div>
+<div class="row">
+<input id="email" placeholder="Email (optionnel)">
+<input id="url" placeholder="URL du projet (optionnel)">
+<select id="licence">
+<option value="NEXUS-OPEN-2.0">NEXUS-OPEN-2.0</option>
+<option value="MIT">MIT</option>
+<option value="Apache-2.0">Apache-2.0</option>
+<option value="GPL-3.0">GPL-3.0</option>
+<option value="BSD-3-Clause">BSD-3-Clause</option>
+<option value="Unlicense">Unlicense</option>
+</select>
+<button onclick="generer()">GENERER</button>
+</div>
+</div>
+
+<div class="card">
+<h2>Header pour fichier source</h2>
+<button onclick="genererHeader()">GENERER HEADER</button>
+</div>
+
+<div class="card">
+<h2>Verification de paternite</h2>
+<div class="row">
+<input id="verif-nom" placeholder="Nom a verifier (ex: Aissa Mohammedi)">
+<button class="alt" onclick="verifier()">VERIFIER</button>
+</div>
+<div id="verif-resultats"></div>
+</div>
+
+<div class="card">
+<h2>APIs copyright disponibles</h2>
+<div id="apis"></div>
+</div>
+
+<div id="resultats"></div>
+
+<div class="footer">NEXUS COPYRIGHT GENERATOR v__V__ - Aissa Mohammedi (DGK)</div>
+</div>
+
+<script>
+function esc(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+
+async function generer(){
+var data = {
+auteur: document.getElementById('auteur').value,
+annee: parseInt(document.getElementById('annee').value),
+projet: document.getElementById('projet').value,
+email: document.getElementById('email').value,
+url: document.getElementById('url').value,
+licence: document.getElementById('licence').value,
+};
+var res = document.getElementById('resultats');
+res.innerHTML = '<div style="text-align:center;padding:20px;color:#5a8a7a">Generation...</div>';
+try{
+var r = await fetch('/api/generate', {
+method:'POST',
+headers:{'Content-Type':'application/json'},
+body: JSON.stringify(data)
+});
+var d = await r.json();
+res.innerHTML = '<div class="card"><h2>'+esc(d.licence)+'</h2><pre>'+esc(d.contenu)+'</pre><button onclick="copier(this)" data-content="'+esc(d.contenu)+'">COPIER</button></div>';
+}catch(e){
+res.innerHTML = '<div class="card" style="color:#ff4444">Erreur</div>';
+}
+}
+
+async function genererHeader(){
+var data = {
+auteur: document.getElementById('auteur').value,
+annee: parseInt(document.getElementById('annee').value),
+projet: document.getElementById('projet').value,
+email: document.getElementById('email').value,
+licence: document.getElementById('licence').value,
+};
+var res = document.getElementById('resultats');
+var r = await fetch('/api/header', {
+method:'POST',
+headers:{'Content-Type':'application/json'},
+body: JSON.stringify(data)
+});
+var d = await r.json();
+res.innerHTML = '<div class="card"><h2>Header fichier</h2><pre>'+esc(d.header)+'</pre></div>';
+}
+
+async function verifier(){
+var nom = document.getElementById('verif-nom').value;
+if(!nom) return;
+var res = document.getElementById('verif-resultats');
+res.innerHTML = '<div style="padding:12px;color:#5a8a7a">Verification...</div>';
+var r = await fetch('/api/verify?nom=' + encodeURIComponent(nom));
+var d = await r.json();
+var html = '';
+(d.sources||[]).forEach(function(s){
+var statut = s.erreur ? '<span style="color:#ff4444">erreur</span>' : (s.trouve ? '<span style="color:#00ff88">trouve ('+s.total+')</span>' : '<span style="color:#5a8a7a">aucun</span>');
+html += '<div class="api"><h3>'+esc(s.source)+'</h3><div class="meta">'+statut+'</div></div>';
+});
+res.innerHTML = html;
+}
+
+async function loadApis(){
+var r = await fetch('/api/apis');
+var d = await r.json();
+var res = document.getElementById('apis');
+var html = '';
+Object.keys(d.apis).forEach(function(cat){
+html += '<h3 style="color:#00d4ff;font-size:11px;margin:12px 0 8px;text-transform:uppercase;letter-spacing:1px">'+esc(cat)+'</h3>';
+(d.apis[cat]||[]).forEach(function(a){
+var freeBadge = '<span class="badge free">'+esc(a.free)+'</span>';
+html += '<div class="api"><h3>'+esc(a.nom)+freeBadge+'</h3>'+
+'<div class="meta">'+esc(a.usage)+'</div>'+
+'<div class="meta"><a href="'+esc(a.doc)+'" target="_blank" style="color:#00c8ff">'+esc(a.doc)+'</a></div></div>';
+});
+});
+res.innerHTML = html;
+}
+
+function copier(btn){
+var content = btn.getAttribute('data-content');
+if(navigator.clipboard){
+navigator.clipboard.writeText(content);
+btn.textContent = 'COPIE';
+setTimeout(function(){ btn.textContent = 'COPIER'; }, 1500);
+}
+}
+
+loadApis();
+</script>
+</body>
+</html>"""
+
+
+# ===============================================================
+# SERVEUR
+# ===============================================================
+
+class Handler(BaseHTTPRequestHandler):
+def log_message(self, *a):
+pass
+
+def _send(self, code, content, ctype="application/json"):
+try:
+gz = None
+if len(content) > 500 and "gzip" in self.headers.get("Accept-Encoding", ""):
+import gzip as gzmod
+content = gzmod.compress(content, 6)
+gz = "gzip"
+self.send_response(code)
+self.send_header("Content-Type", ctype + "; charset=utf-8")
+self.send_header("Access-Control-Allow-Origin", "*")
+self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+self.send_header("Access-Control-Allow-Headers", "Content-Type")
+if gz:
+self.send_header("Content-Encoding", gz)
+self.send_header("Content-Length", str(len(content)))
+self.end_headers()
+self.wfile.write(content)
+except (BrokenPipeError, ConnectionResetError):
+pass
+
+def _json(self, obj, code=200):
+self._send(code, json.dumps(obj, ensure_ascii=False, default=str).encode("utf-8"))
+
+def _html(self, html):
+self._send(200, html.encode("utf-8"), "text/html")
+
+def do_OPTIONS(self):
+self._send(204, b"")
+
+def do_GET(self):
+try:
+u = urllib.parse.urlparse(self.path)
+p = u.path
+q = urllib.parse.parse_qs(u.query)
+
+if p in ("/", "/index.html"):
+html = HTML.replace("__V__", VERSION).replace("__AUTEUR__", AUTEUR)
+return self._html(html)
+
+if p == "/api/health":
+return self._json({"status": "ok", "version": VERSION})
+
+if p == "/api/apis":
+return self._json({"apis": APIS_COPYRIGHT})
+
+if p == "/api/verify":
+nom = q.get("nom", [""])[0]
+if not nom:
+return self._json({"erreur": "nom requis"}, 400)
+return self._json(verifier_paternite(nom))
+
+if p == "/api/licences":
+return self._json({"licences": list(LICENCES_PREDEFINIES.keys())})
+
+return self._json({"erreur": "not found"}, 404)
+except Exception as e:
+return self._json({"erreur": str(e)[:200]}, 500)
+
+def do_POST(self):
+try:
+u = urllib.parse.urlparse(self.path)
+p = u.path
+length = int(self.headers.get("Content-Length", 0))
+body = self.rfile.read(length).decode("utf-8", "ignore") if length else "{}"
+try:
+data = json.loads(body)
+except Exception:
+data = {}
+
+if p == "/api/generate":
+licence = data.get("licence", "NEXUS-OPEN-2.0")
+auteur = data.get("auteur", AUTEUR)
+annee = data.get("annee")
+projet = data.get("projet", "")
+email = data.get("email", "")
+url = data.get("url", "")
+result = generer_copyright(licence, auteur, annee, projet, email, url)
+return self._json(result)
+
+if p == "/api/header":
+auteur = data.get("auteur", AUTEUR)
+annee = data.get("annee", datetime.datetime.now().year)
+projet = data.get("projet", "")
+licence = data.get("licence", "NEXUS-OPEN-2.0")
+email = data.get("email", "")
+header = generer_header_fichier(auteur, annee, projet, licence, email)
+return self._json({"header": header})
+
+return self._json({"erreur": "not found"}, 404)
+except Exception as e:
+return self._json({"erreur": str(e)[:200]}, 500)
+
+
+def main():
+server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
+server.daemon_threads = True
+print("================================================================")
+print(" NEXUS COPYRIGHT GENERATOR v" + VERSION)
+print(" Auteur : Aissa Mohammedi (DGK)")
+print(" Licence : NEXUS-OPEN-2.0")
+print("================================================================")
+print()
+print(" Interface : http://localhost:" + str(PORT) + "/")
+print(" Licences : " + ", ".join(LICENCES_PREDEFINIES.keys()))
+print(" APIs : GitHub, SPDX, USPTO, INPI, EUIPO, WIPO, Crossref, ORCID, OpenAlex")
+print()
+print(" Ctrl+C pour arreter.")
+print()
+try:
+server.serve_forever()
+except KeyboardInterrupt:
+print("\nArrete.")
+
+
+if __name__ == "__main__":
+main()
